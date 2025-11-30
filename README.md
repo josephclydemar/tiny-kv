@@ -1,2 +1,2 @@
 # Tiny KV
-A minimalist TCP-based key-value store that supports simple text commands like SET, GET, DEL, and DUMP. It's a lightweight learning project in building custom protocols and client-server communication over raw TCP.
+A simple key-value store implementing text commands like SET, GET, DEL, and DUMP. Built as a learning project for exploring custom protocols and the fundamentals of client–server communication.
