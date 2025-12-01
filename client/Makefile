@@ -3,7 +3,7 @@ CFLAGS = -std=c99 -Wall -Wextra -Werror -MMD -D_DEFAULT_SOURCE
 INCLUDE = -I include
 LFLAGS =
 
-SOURCE_FILES = $(wildcard src/*.c)
+SOURCE_FILES = $(shell find src -type f -name '*.c')
 OBJECT_FILES = $(patsubst src/%.c,build/%.o,$(SOURCE_FILES))
 DEPS_FILES = $(OBJECT_FILES:.o=.d)
 TARGET_BIN = build/target.out
@@ -17,7 +17,7 @@ run:
 	@$(TARGET_BIN)
 
 clean:
-	$(RM) $(wildcard build/*)
+	rm -rf $(wildcard build/*)
 
 
 release: CFLAGS += -DNODEBUG
@@ -30,13 +30,12 @@ debug: LFLAGS += -O0
 debug: $(TARGET_BIN)
 
 
-
 -include $(DEPS_FILES)
 
 build/%.o: src/%.c
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(INCLUDE) -c $< -o $@
 
 $(TARGET_BIN): $(OBJECT_FILES)
 	$(CC) $(CFLAGS) $(LFLAGS) $^ -o $@
-
 
