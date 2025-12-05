@@ -1,0 +1,11 @@
+*.txt
+*.md
+*.json
+.cache
+*.gdb_history
+
+*.o
+*.d
+*.out
+*.elf
+*.exe
