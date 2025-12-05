@@ -1,4 +1,5 @@
 #include "core/kv_server.h"
+#include "core/kv_fd_rqueue.h"
 #include "network/server_socket.h"
 #include "network/client_socket.h"
 #include "util/debugging.h"
@@ -6,14 +7,14 @@
 #include <pthread.h>
 #include <semaphore.h>
 #include <stdbool.h>
-#include <stdlib.h>
 #include <unistd.h>
 #include <asm-generic/socket.h>
 #include <string.h>
 #include <sys/socket.h>
 
-#define RECV_BUF_SIZE         50
-#define SEND_BUF_SIZE         50
+#define PORT                  "5800"
+#define RECV_BUF_SIZE         4096
+#define SEND_BUF_SIZE         1024
 
 kv_server_t kv_serv;
 server_socket_t serv_socket;
@@ -23,7 +24,7 @@ static inline void kv_conn_server_init(kv_server_t* const kv_server)
 {
   ASSERT("PTHREAD_MUTEX_INIT",
     pthread_mutex_init(
-      &kv_serv.kv_conn_queue_lock,
+      &kv_serv.kv_conn_queue.lock,
       NULL
     ) == 0
   );
@@ -41,62 +42,37 @@ static inline void kv_conn_server_init(kv_server_t* const kv_server)
     ) == 0
   );
 
-  kv_server->kv_conn_queue.back_idx = 0;
-  kv_server->kv_conn_queue.back_idx = 0;
-  kv_server->kv_conn_queue.count = 0;
-  kv_server->kv_conn_queue.cap = MAX_CONN_BACKLOG;
-  kv_server->kv_conn_queue.kv_conn_fd_buf = malloc(sizeof(int) * MAX_CONN_BACKLOG);
-}
-
-int kv_conn_enqueue(kv_conn_queue_t* const kv_conn_queue, int kv_conn_fd)
-{
-  if (kv_conn_queue->count == kv_conn_queue->cap) return -1;
-  if (kv_conn_queue->back_idx >= kv_conn_queue->cap) {
-    kv_conn_queue->back_idx = kv_conn_queue->back_idx % kv_conn_queue->cap;
-  }
-  *(kv_conn_queue->kv_conn_fd_buf + kv_conn_queue->back_idx) = kv_conn_fd;
-  kv_conn_queue->back_idx++;
-  kv_conn_queue->count++;
-  return 0;
-}
-
-int kv_conn_dequeue(kv_conn_queue_t* const kv_conn_queue)
-{
-  if (kv_conn_queue->count == 0) return -1;
-  int kv_conn_fd = *(kv_conn_queue->kv_conn_fd_buf + kv_conn_queue->front_idx);
-  if (kv_conn_queue->front_idx == 0) kv_conn_queue->front_idx = kv_conn_queue->cap - 1;
-  else kv_conn_queue->front_idx--;
-  kv_conn_queue->count--;
-  return kv_conn_fd;
+  kv_fd_rqueue_init(&kv_server->kv_conn_queue.kv_q, MAX_CONN_BACKLOG);
 }
 
 void* kv_ctrl_fn(void* param)
 {
-  (void)param;
   client_socket_t clnt_socket;
 
-  server_socket_setup(&serv_socket, MAX_CONN_BACKLOG);
+  server_socket_setup(&serv_socket, PORT, MAX_CONN_BACKLOG);
   client_socket_setup(&clnt_socket);
   kv_conn_server_init(&kv_serv);
+
+  DEBUG_LOG("CONTROLLER", "[PORT: %s] %s", PORT, (char *)param);
 
   while (true) {
     sem_wait(&kv_serv.kv_conn_handler_ready_sem);
 
     clnt_socket.client_socket_fd = accept(
       serv_socket.server_socket_fd,
-      (struct sockaddr *)&clnt_socket.client_addr,
+      (struct sockaddr *)&(clnt_socket.client_addr),
       &clnt_socket.client_addr_size
     );
     ASSERT("ACCEPT", clnt_socket.client_socket_fd >= 0);
 
-    pthread_mutex_lock(&kv_serv.kv_conn_queue_lock);
-    ASSERT("KV_CONN_ENQUEUE",
-      kv_conn_enqueue(
-        &kv_serv.kv_conn_queue,
+    pthread_mutex_lock(&kv_serv.kv_conn_queue.lock);
+    ASSERT("KV_FD_RENQUEUE",
+      kv_fd_renqueue(
+        &kv_serv.kv_conn_queue.kv_q,
         clnt_socket.client_socket_fd
       ) == 0
     );
-    pthread_mutex_unlock(&kv_serv.kv_conn_queue_lock);
+    pthread_mutex_unlock(&kv_serv.kv_conn_queue.lock);
     pthread_cond_signal(&kv_serv.kv_conn_arrival_cond);
   }
 
@@ -105,41 +81,42 @@ void* kv_ctrl_fn(void* param)
 
 void* kv_conn_handler_fn(void* param)
 {
-  (void)param;
-  client_socket_t clnt_socket;
-  client_socket_setup(&clnt_socket);
-
+  int client_socket_fd = 0;
   char recv_buf[RECV_BUF_SIZE];
   char send_buf[SEND_BUF_SIZE];
+
+  pthread_t tid = pthread_self();
+  INFO_LOG("HANDLER", "[0x%lx] %s", tid, (char *)param);
   while (true) {
-    pthread_mutex_lock(&kv_serv.kv_conn_queue_lock);
-    clnt_socket.client_socket_fd = kv_conn_dequeue(&kv_serv.kv_conn_queue);
-    ASSERT("KV_CONN_ENQUEUE",
-      clnt_socket.client_socket_fd == 0
-    );
-    pthread_mutex_unlock(&kv_serv.kv_conn_queue_lock);
+    pthread_mutex_lock(&kv_serv.kv_conn_queue.lock);
+    while (kv_serv.kv_conn_queue.kv_q.len <= 0) {
+      pthread_cond_wait(&kv_serv.kv_conn_arrival_cond, &kv_serv.kv_conn_queue.lock);
+    }
+    client_socket_fd = kv_fd_rdequeue(&kv_serv.kv_conn_queue.kv_q);
+    ASSERT("KV_FD_RDEQUEUE", client_socket_fd > -1);
+    pthread_mutex_unlock(&kv_serv.kv_conn_queue.lock);
 
     memset(recv_buf, 0, RECV_BUF_SIZE);
     ASSERT("RECV",
       recv(
-        clnt_socket.client_socket_fd,
+        client_socket_fd,
         recv_buf,
         RECV_BUF_SIZE - 1,
         0
       ) >= 0
     );
-    DEBUG_LOG("MSG", "[%s]", recv_buf);
+    DEBUG_LOG("RECV_MSG", YELLOW_COLOR_TEXT "%s" DEFAULT_COLOR_TEXT, recv_buf);
 
     ASSERT("SEND",
       send(
-        clnt_socket.client_socket_fd,
+        client_socket_fd,
         send_buf,
         SEND_BUF_SIZE,
         0
       ) >= 0
     );
 
-    close(clnt_socket.client_socket_fd);
+    close(client_socket_fd);
     sem_post(&kv_serv.kv_conn_handler_ready_sem);
   }
   pthread_exit(NULL);

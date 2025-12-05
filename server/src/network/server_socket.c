@@ -4,10 +4,11 @@
 #include <string.h>
 #include <sys/socket.h>
 
-#define PORT                  "5800"
 
-void server_socket_setup(server_socket_t* const server_socket, size_t max_conn_backlog)
+void server_socket_setup(server_socket_t* const server_socket, const char* const port, size_t max_conn_backlog)
 {
+  server_socket->optval = 1;
+  server_socket->server_socket_fd = 0;
   server_socket->server_info = NULL;
 
   memset(&(server_socket->hints), 0, sizeof(struct addrinfo));
@@ -19,7 +20,7 @@ void server_socket_setup(server_socket_t* const server_socket, size_t max_conn_b
   ASSERT("GETADDRINFO",
     getaddrinfo(
       NULL,
-      PORT,
+      port,
       &server_socket->hints,
       &server_socket->server_info
     ) == 0

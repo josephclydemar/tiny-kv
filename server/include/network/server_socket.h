@@ -12,7 +12,7 @@ typedef struct server_socket_t {
   struct addrinfo* server_info;
 } server_socket_t;
 
-void server_socket_setup(server_socket_t* const server_socket, size_t max_conn_backlog);
+void server_socket_setup(server_socket_t* const server_socket, const char* const port, size_t max_conn_backlog);
 
 #endif // SERVER_SOCKET_H_
 
