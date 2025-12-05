@@ -7,6 +7,7 @@
 #include <pthread.h>
 #include <semaphore.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include <unistd.h>
 #include <asm-generic/socket.h>
 #include <string.h>
@@ -82,11 +83,12 @@ void* kv_ctrl_fn(void* param)
 void* kv_conn_handler_fn(void* param)
 {
   int client_socket_fd = 0;
-  char recv_buf[RECV_BUF_SIZE];
-  char send_buf[SEND_BUF_SIZE];
+  char recv_buf[RECV_BUF_SIZE] = {0};
+  char send_buf[SEND_BUF_SIZE] = {0};
 
   pthread_t tid = pthread_self();
   INFO_LOG("HANDLER", "[0x%lx] %s", tid, (char *)param);
+  snprintf(send_buf, SEND_BUF_SIZE - 1, "FROM tid: 0x%lx", tid);
   while (true) {
     pthread_mutex_lock(&kv_serv.kv_conn_queue.lock);
     while (kv_serv.kv_conn_queue.kv_q.len <= 0) {
@@ -105,7 +107,7 @@ void* kv_conn_handler_fn(void* param)
         0
       ) >= 0
     );
-    DEBUG_LOG("RECV_MSG", YELLOW_COLOR_TEXT "%s" DEFAULT_COLOR_TEXT, recv_buf);
+    INFO_LOG("RECV_MSG", YELLOW_COLOR_TEXT "%s" DEFAULT_COLOR_TEXT, recv_buf);
 
     ASSERT("SEND",
       send(

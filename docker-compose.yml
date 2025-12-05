@@ -1,0 +1,12 @@
+name: Tiny-KV
+services:
+  tiny-kv-server:
+    image: tiny-kv-server:1
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    stdin_open: true
+    tty: true
+    container_name: tiny-kv-server
+    ports:
+      - 5800:5800
