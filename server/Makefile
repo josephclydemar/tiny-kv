@@ -43,8 +43,11 @@ utest-v:
 	@$(UTEST_TARGET) --verbose=1
 
 clean:
-	rm -rf $(wildcard build/*)
+	$(RM) $(shell find build -type f ! -name '.gitkeep')
 
+nolog: CFLAGS += -DNODEBUG -DNOLOG
+nolog: LFLAGS += -O3 -s
+nolog: $(SOURCE_TARGET)
 
 release: CFLAGS += -DNODEBUG
 release: LFLAGS += -O3 -s

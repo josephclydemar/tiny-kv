@@ -48,6 +48,7 @@ static inline void kv_conn_server_init(kv_server_t* const kv_server)
 
 void* kv_ctrl_fn(void* param)
 {
+  LOG_ONLY_EXPR(param);
   client_socket_t clnt_socket;
 
   server_socket_setup(&serv_socket, PORT, MAX_CONN_BACKLOG);
@@ -82,6 +83,7 @@ void* kv_ctrl_fn(void* param)
 
 void* kv_conn_handler_fn(void* param)
 {
+  LOG_ONLY_EXPR(param);
   int client_socket_fd = 0;
   char recv_buf[RECV_BUF_SIZE] = {0};
   char send_buf[SEND_BUF_SIZE] = {0};

@@ -342,6 +342,9 @@
 #if NOLOG
     #define LOG(_color, _component, _fmt, ...)
 
+    #define LOG_ONLY_EXPR(_expr) ((void)(_expr))
+    #define LOG_ONLY_STMT(_stmt)
+
     #define INFO_LOG(_component, _fmt, ...)
     #define WARN_LOG(_component, _fmt, ...)
     #define PROFL_LOG(_component, _fmt, ...)
@@ -350,11 +353,9 @@
     #define FATAL_LOG(_component, _fmt, ...)
 #else
     #include <time.h>
-    
-    #define PLACE_LOG(_pos_r) do {   \
-        printf("\x1b[" _pos_r ";0H"  \
-               );                    \
-    } while(0)
+
+    #define LOG_ONLY_EXPR(_expr)
+    #define LOG_ONLY_STMT(_stmt) _stmt
 
     // logging
     #define LOG(_color, _component, _fmt, ...) do {                          \
